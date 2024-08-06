@@ -64,14 +64,14 @@ function zenopay_gateway_init() {
                     'title'       => __('Title', 'zenopay'),
                     'type'        => 'text',
                     'description' => __('This controls the title which the user sees during checkout.', 'zenopay'),
-                    'default'     => __('Credit Card Payment', 'zenopay'),
+                    'default'     => __('Lipa kwa mitandao ya simu', 'zenopay'),
                     'desc_tip'    => true,
                 ),
                 'description' => array(
                     'title'       => __('Description', 'zenopay'),
                     'type'        => 'textarea',
                     'description' => __('This controls the description which the user sees during checkout.', 'zenopay'),
-                    'default'     => __('Pay with your credit card.', 'zenopay'),
+                    'default'     => __('Lipa kwa mitandao ya simu.', 'zenopay'),
                 ),
                 'account_id' => array(
                     'title'       => __('Account ID', 'zenopay'),
@@ -99,7 +99,7 @@ function zenopay_gateway_init() {
 
         public function process_payment($order_id) {
             $order = wc_get_order($order_id);
-
+        
             // Prepare the data for the cURL request
             $data = array(
                 'create_order' => 1,
@@ -111,17 +111,21 @@ function zenopay_gateway_init() {
                 'api_key'      => $this->api_key,
                 'secret_key'   => $this->secret_key,
             );
-
+        
             // Debugging the request data
             error_log('Request Data: ' . http_build_query($data));
-
+        
             $ch = curl_init();
             curl_setopt($ch, CURLOPT_URL, 'https://ezycard.zeno.africa/process.php');
             curl_setopt($ch, CURLOPT_POST, 1);
             curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            
+            // Set timeout to 60 seconds
+            curl_setopt($ch, CURLOPT_TIMEOUT, 60); // Timeout in seconds
+        
             $response = curl_exec($ch);
-
+        
             if (curl_errno($ch)) {
                 $error_msg = curl_error($ch);
                 wc_add_notice(__('Curl error: ' . $error_msg, 'zenopay'), 'error');
@@ -134,10 +138,10 @@ function zenopay_gateway_init() {
             } else {
                 curl_close($ch);
                 $responseData = json_decode($response, true);
-
+        
                 // Debugging the API response
                 error_log('API Response: ' . print_r($responseData, true));
-
+        
                 if (isset($responseData['message'])) {
                     wc_add_notice(htmlspecialchars($responseData['message']), 'notice');
                     return array(
@@ -146,7 +150,7 @@ function zenopay_gateway_init() {
                     );
                 } else {
                     $redirect_url = isset($responseData['redirect_url']) ? $responseData['redirect_url'] : '';
-
+        
                     if ($redirect_url) {
                         $order->update_status('pending', __('Awaiting ZenoPay payment', 'zenopay'));
                         WC()->cart->empty_cart();
@@ -166,7 +170,66 @@ function zenopay_gateway_init() {
         }
 
         public function handle_webhook() {
-            // Webhook handling logic
+            // Verify request method
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+                wp_die('Invalid request method.');
+            }
+
+            // Define a secret for verifying the webhook source
+            $webhookSecret = $this->secret_key;
+
+            // Read the incoming POST data
+            $payload = file_get_contents('php://input');
+            $headers = getallheaders();
+
+            // Log the received data for debugging purposes
+            file_put_contents(plugin_dir_path(__FILE__) . 'webhook_logs.txt', "Payload: " . $payload . "\n", FILE_APPEND);
+            file_put_contents(plugin_dir_path(__FILE__) . 'webhook_logs.txt', "Headers: " . print_r($headers, true) . "\n", FILE_APPEND);
+
+            // Validate the signature or secret if provided by the gateway
+            $signature = isset($headers['X-Signature']) ? $headers['X-Signature'] : '';
+            if (!hash_equals($signature, hash_hmac('sha256', $payload, $webhookSecret))) {
+                http_response_code(400);
+                exit('Invalid signature');
+            }
+
+            $data = json_decode($payload, true);
+
+            if (!$data) {
+                http_response_code(400);
+                exit('Invalid payload');
+            }
+
+            // Extract data from the webhook payload
+            $order_id = $data['order_id'] ?? null;
+            $payment_status = $data['payment_status'] ?? null;
+            $resultcode = $data['resultcode'] ?? null;
+
+            // Log the data for debugging
+            file_put_contents(plugin_dir_path(__FILE__) . 'webhook_logs.txt', "Parsed Data: " . print_r($data, true) . "\n", FILE_APPEND);
+
+            // Ensure the necessary data is present
+            if ($order_id && $payment_status && $resultcode === '000') {
+                try {
+                    // Update the order status in WooCommerce
+                    $order = wc_get_order($order_id);
+                    $received = $payment_status === 'COMPLETE' ? 'completed' : 'failed';
+                    $order->update_status($received, __('Payment completed via ZenoPay.', 'zenopay'));
+
+                    // Log the update
+                    file_put_contents(plugin_dir_path(__FILE__) . 'webhook_logs.txt', "Order Status Updated: " . $received . "\n", FILE_APPEND);
+
+                    http_response_code(200);
+                    echo json_encode(['message' => 'Success']);
+                } catch (Exception $e) {
+                    http_response_code(500);
+                    file_put_contents(plugin_dir_path(__FILE__) . 'webhook_logs.txt', "Error: " . $e->getMessage() . "\n", FILE_APPEND);
+                    echo json_encode(['message' => 'An error occurred: ' . $e->getMessage()]);
+                }
+            } else {
+                http_response_code(400);
+                echo json_encode(['message' => 'Invalid data']);
+            }
         }
     }
 
