@@ -1,39 +1,74 @@
-Getting Started with Zenopay
 
-Welcome to Zenopay! Follow these simple steps to get started with our service:
 
-Step 1: Download the Zenopay App
+## **Getting Started with ZenoPay**
 
-1. Visit the [Zenopay website](https://www.zenopay.net) or your device’s app store.
-2. Download and install the Zenopay app on your device.
+Welcome to **ZenoPay**, your trusted partner for seamless digital payments and API-driven financial solutions. Follow the steps below to get started with our services:
 
-Step 2: Register and Obtain Your Account ID
+---
 
-1. Open the Zenopay app.
-2. Complete the registration process to create your account.
-3. Once registered, you will receive an Account ID.
+### **Step 1: Download the ZenoPay App**
 
-## Step 3: Share Your Account ID
+1. Visit our official website at [www.zenopay.net](https://www.zenopay.net) or search **ZenoPay** on the App Store or Google Play.
+2. Download and install the ZenoPay app on your smartphone or device.
 
-To receive your API Key and Secret Key, please share your Account ID with us using the following methods:
+---
 
-- Email:
-  - Send your Account ID to md@zeno.co.tz 
+### **Step 2: Register and Get Your Account ID**
 
-- WhatsApp:
-  - Message your Account ID to +255742920510 
+1. Open the ZenoPay app.
+2. Complete the registration process to create your ZenoPay account.
+3. After successful registration, you will receive a unique **Account ID** — this ID is required for API access.
 
-Step 4: Receive API Key and Secret Key
+---
 
-After sharing your Account ID, you will receive your API Key and Secret Key.
+### **Step 3: Share Your Account ID**
 
-Step 5: Start Using Zenopay
+To activate your API credentials, share your Account ID with our support team via one of the following channels:
 
-With your API Key and Secret Key, you can now integrate Zenopay with your system and start using our services.
+* **Email:** [support@zenopay.net](mailto:support@zenopay.net)
+* **WhatsApp:** [+255 793 166 166](https://wa.me/255793166166)
 
-For further assistance or if you encounter any issues, please contact our support team at:
+---
 
-- Email: support@zenopay.net
-- WhatsApp: +255742920510
+### **Step 4: Receive Your API Key and Secret Key**
 
-Thank you for choosing Zenopay. We look forward to supporting your business!
+Once we receive your Account ID, our team will generate and send you the following integration credentials:
+
+* **API Key**
+* **Secret Key**
+
+These keys allow you to connect securely to ZenoPay’s API services.
+
+---
+
+### **Step 5: Start Integrating ZenoPay**
+
+With your API credentials, you can now begin integrating ZenoPay into your system. Use our [API Documentation](https://www.zenopay.net/docs) for guidance, or contact our team for technical support.
+
+---
+
+## **Need Help? Contact Our Team**
+
+For assistance, integration support, or business inquiries, feel free to contact the appropriate team:
+
+### 🔧 **Integration Support**
+
+**Frank Youze** – Integration Support Engineer
+📞 +255 755 796 289
+
+### 🤝 **Business Relationships**
+
+**Maximillian** – Business Relationship Manager
+📞 +255 696 975 878
+
+### 📩 **General Support**
+
+**Email:** [support@zenopay.net](mailto:support@zenopay.net)
+**WhatsApp:** [+255 793 166 166](https://wa.me/255793166166)
+**Website:** [www.zenopay.net](https://www.zenopay.net)
+
+---
+
+Thank you for choosing **ZenoPay**. We’re excited to power your payments and help your business grow.
+
+Let me know if you’d like a PDF version or Swahili translation of this guide.
