@@ -124,20 +124,25 @@ class zenopayGateway extends WC_Payment_Gateway
     public  function zeno_initiate_payment($mobile, $order_id)
     {
 
+
         $phoneNumber = substr($mobile, -9);
         $region = "TZ";
 
         $carrierName = getCarrierName($phoneNumber, $region);
 
         if (!(strpos(strtolower($carrierName), 'invalid') !== false || empty($carrierName))) {
+            // $order = wc_get_order($order_id);
             $order = wc_get_order($order_id);
+
+            // echo($order->get_billing_email());
 
             // Prepare the data for the cURL request
             $data = array(
                 'create_order' => 1,
                 'buyer_email'  => $order->get_billing_email(),
                 'buyer_name'   => $order->get_billing_first_name() . ' ' . $order->get_billing_last_name(),
-                'buyer_phone'  => $order->get_billing_phone(),
+                // 'buyer_phone'  => $order->get_billing_phone(),
+                'buyer_phone'  => '255'.$phoneNumber,
                 'amount'       => $order->get_total(),
                 'account_id'   => $this->get_option('account_id'),
                 'api_key'      => $this->api_key,
@@ -186,6 +191,7 @@ class zenopayGateway extends WC_Payment_Gateway
             'api_key'      => $this->api_key,
             'secret_key'   => $this->secret_key,
         );
+
 
         // Send cURL request
         $orderStatus = $this->send_curl_request('https://api.zeno.africa/status.php', $data);

@@ -1,241 +1,273 @@
- 
- 
 jQuery(document).ready(function($) {
-    // Create and append custom styles for SweetAlert2
-    const style2 = document.createElement('style');
-    style2.innerHTML = `
-    .swal2-confirm.btn-block {
-        display: block;
-        width: 200px !important;
-        padding: 10px;
-        font-size: 18px;
-        background-color: #007bff;
-        color: white;
-        border: none;
-        border-radius: 0.25rem;
-    }
-    .swal2-confirm.btn-block:hover {
-        background-color: #0056b3;
-    }
-    `;
-    document.head.appendChild(style2);
+    // === CONFIG ===
+    const config = {
+        timerInterval: null,
+        waitingTime: 90,
+        userMobile: null,
+        orderId: zenopay_data.order_id,
+        ZenoPayOrderId: null,
+        systemUrl: zenopay_data.ajax_url,
+        paymentMethodId: 'zenopay',
+        isZenoPayActive: false,
+        maxInjectionAttempts: 5,
+        injectionAttempts: 0
+    };
 
+    // === UTILITIES ===
+    const utils = {
+        // Store original event handlers
+        originalHandlers: new Map(),
+        
+        // Disable all other button handlers
+        disableOtherHandlers: function() {
+            const button = document.getElementById('place_order');
+            if (!button) return;
 
-
-    let timerInterval;
-    let waitingTime = 90; 
-    let userMobile = null;
-    let orderId = zenopay_data.order_id;
-    let ZenoPayOrderId = null;
-    let bkOvalay = 'rgba(0,0,0,0.8)';
-    let txtColor = '#333'; 
-
-
-    const systemUrl =  zenopay_data.ajax_url; 
-    const ZenoPayLogo = zenopay_data.ZenoPayLogoPath; 
-
-    const welcome_message = '<center><h1 style= "color: red; font-size: 3rem; margin: 0px; padding: 0px;">Weka Namba ya Mtandao Husika</h1><img src="' + ZenoPayLogo + '"></center>'; 
-    const session_expire_message = 'Your session has expired. Please try again.'; 
-    const retry_button_text = 'Retry';
-    const change_number_button_text = 'Change Number';
-    const pay_button_text = 'Pay Now';
-    const payment_placeholder = 'Enter your payment number' ;  
-
-    
-    // Load SweetAlert2 and initialize payment process
-    function loadSweetAlert() {
-        var script = document.createElement('script');
-        script.src = "https://cdn.jsdelivr.net/npm/sweetalert2@11";
-        script.onload = function() {
-            console.log('SweetAlert2 loaded successfully');
-            initPaymentProcess();
-        };
-        document.head.appendChild(script);
-    } 
-
-    // Initialize payment process on checkout form submission
-    function initPaymentProcess() {
-        $('form.checkout').on('submit', function(e) {
-            e.preventDefault(); // Prevent form submission
-            startPaymentProcess();
-        });
-    } 
-
-    // Start the payment process
-    function startPaymentProcess() {
-        Swal.fire({
-            html: `${welcome_message}`,
-            input: "text",
-            inputAttributes: {
-                autocapitalize: "off",
-                placeholder: `${payment_placeholder}`,
-                required: true
-            },
-            showCancelButton: false,
-            confirmButtonText: `${pay_button_text}`,
-            showLoaderOnConfirm: true,
-            preConfirm: (mobile) => handlePayment(mobile),
-            allowOutsideClick: false,
-            color: txtColor,
-            backdrop: bkOvalay,
-            customClass: {
-                confirmButton: "btn-block btn-primary"  
-            }
-        });
-    }
- 
-    // Handle the payment process
-    function handlePayment(mobile) {
-        userMobile = mobile;
-        return fetchUserData(userMobile).then(data => {
-            if (data) { 
-                if (data.status) {
-                    showPaymentStatus(data);
-                } else {
-                    Swal.fire({
-                        title: 'Error',
-                        text: data.message,
-                        icon: 'error',
-                        confirmButtonText: retry_button_text,
-                        cancelButtonText: change_number_button_text,
-                        showCancelButton: true,
-                        allowOutsideClick: false,
-                        color: txtColor,
-                        backdrop: bkOvalay,
-                        preConfirm: () => handlePayment(userMobile)
-                    }).then(result => {
-                        if (result.isDismissed) {
-                            startPaymentProcess();
-                        }
-                    });
-                }
-            }
-        });
-    }
-
-   
-    // Fetch user data based on mobile number
-    function fetchUserData(mobile) {
-        const url = systemUrl;
-        const data = {
-            action: 'zeno_initiate_payment',
-            order_id: orderId,
-            mobile: mobile
-        }; 
-        return new Promise((resolve, reject) => {
-            $.ajax({
-                url: url,
-                type: 'POST',
-                data: data,
-                success: function(response) { 
-                    if(response.data.status) {
-                        ZenoPayOrderId = response.data.zenoOrderId
-                    } 
-                    resolve(response.data);
-                },
-                error: function() { 
-                    reject({ status: false, message: 'Network Error' });
-                }
+            // Clone the element to remove all event listeners
+            const newButton = button.cloneNode(true);
+            button.parentNode.replaceChild(newButton, button);
+            
+            // Restore our control handler
+            $(newButton).on('click.zenopay', handleZenoPayment);
+            return newButton;
+        },
+        
+        // Restore original handlers
+        restoreHandlers: function() {
+            const button = document.getElementById('place_order');
+            if (!button || !this.originalHandlers.has(button)) return;
+            
+            const handlers = this.originalHandlers.get(button);
+            handlers.forEach(({ type, handler }) => {
+                button.addEventListener(type, handler);
             });
-        });
-    }
+        },
+        
+        // Robust injection with retry
+        injectPaymentPrompt: function() {
+            try {
+                const zenoUI = `
+                    <div id="zenopay-prompt" style="margin-top: 20px; padding: 10px 0; display: none;">
+                        <p style="color: red; text-align: center;">Weka Namba ya Simu ya Kulipa nayo</p>
+                        <input type="text" id="zenopay-mobile-input" placeholder="Enter your payment number"
+                            required style="padding: 10px; font-size: 1.2rem; width: 100%; max-width: 400px; display: block; margin: 0 auto;">
+                        <div id="zenopay-status" style="margin-top: 20px; text-align: center;"></div>
+                    </div>`;
 
-
-    // Show payment status in SweetAlert
-    function showPaymentStatus(orderInfo) {
-        Swal.fire({
-            allowOutsideClick: false,
-            html: `${orderInfo.message}`,
-            imageUrl: orderInfo.image,
-            imageHeight: 110,
-            showConfirmButton: false,
-            showLoaderOnConfirm: true,
-            color: txtColor,
-            backdrop: bkOvalay,
-            didOpen: () => {
-                Swal.showLoading();
-                startOrderCheck(orderInfo);
-            },
-            willClose: () => clearInterval(timerInterval)
-        });
-    }
-
-
-    // Start checking the order status with a countdown
-    function startOrderCheck() {
-        let timer = waitingTime;
-        let timerInterval = setInterval(async () => {
-            Swal.update({ title: `Expire in ${timer--} seconds` });
-
-            if (timer % 15 === 0) {
-                const orderInfo = await fetchOrderStatus();
-                if (orderInfo && orderInfo.status) {
-                    clearInterval(timerInterval);
-                    Swal.fire({
-                        html: `${orderInfo.message}`,
-                        icon: "success",
-                        timer: 3000,
-                        timerProgressBar: true,
-                        allowOutsideClick: false,
-                        color: txtColor,
-                        backdrop: bkOvalay,
-                        willClose: () => {
-
-                            if (orderInfo.redirect && isSameOrigin(orderInfo.url)) {
-                                window.location = orderInfo.url; 
-                            } else {
-                                window.open(orderInfo.url, '_self'); 
-                            } 
-                        }
-                    });
+                const paymentMethodElement = $(`li.wc_payment_method.payment_method_${config.paymentMethodId}`);
+                
+                if (paymentMethodElement.length) {
+                    // Check if prompt already exists
+                    if ($('#zenopay-prompt').length === 0) {
+                        paymentMethodElement.after(zenoUI);
+                        console.log('ZenoPay prompt injected successfully');
+                        return true;
+                    }
+                    return true;
+                } else {
+                    // Fallback injection
+                    if (config.injectionAttempts < config.maxInjectionAttempts) {
+                        config.injectionAttempts++;
+                        console.warn(`Payment method not found, retrying (${config.injectionAttempts}/${config.maxInjectionAttempts})...`);
+                        setTimeout(() => this.injectPaymentPrompt(), 500);
+                        return false;
+                    } else {
+                        console.error('Failed to inject ZenoPay prompt after maximum attempts');
+                        return false;
+                    }
                 }
+            } catch (error) {
+                console.error('Error injecting payment prompt:', error);
+                return false;
             }
+        }
+    };
 
-            if (timer < 0) {
-                clearInterval(timerInterval);
-                Swal.fire({
-                    title: 'Time expired',
-                    text: session_expire_message,
-                    icon: 'warning',
-                    allowOutsideClick: false,
-                    color: txtColor,
-                    backdrop: bkOvalay,
-                    confirmButtonText: retry_button_text,
-                    cancelButtonText: change_number_button_text,
-                    showCancelButton: true,
-                    preConfirm: () => handlePayment(userMobile)
-                }).then(result => {
-                    if (result.isDismissed) {
-                        startPaymentProcess();
+    // === PAYMENT UI ===
+    const ui = {
+        init: function() {
+            // Initialize with retry logic
+            if (!utils.injectPaymentPrompt()) {
+                return;
+            }
+            
+            // Initialize phone sync
+            this.syncBillingPhone();
+            $('#billing_phone').on('input', this.syncBillingPhone);
+        },
+        
+        syncBillingPhone: function() {
+            const billingPhone = $('#billing_phone').val();
+            if (billingPhone && billingPhone.length > 5) {
+                $('#zenopay-mobile-input').val(billingPhone);
+            }
+        },
+        
+        update: function() {
+            config.isZenoPayActive = $('input[name="payment_method"]:checked').val() === config.paymentMethodId;
+            
+            $('#zenopay-prompt').toggle(config.isZenoPayActive);
+            
+            if (config.isZenoPayActive) {
+                // Take control of the button
+                utils.disableOtherHandlers();
+            } else {
+                // Release control
+                utils.restoreHandlers();
+            }
+        },
+        
+        showStatus: function(message, color = 'black') {
+            $('#zenopay-status').html(`<p style="color: ${color};">${message}</p>`);
+        },
+        
+        setButtonState: function(disabled) {
+            const button = $('#place_order');
+            button.prop('disabled', disabled);
+            disabled ? button.addClass('processing') : button.removeClass('processing');
+        }
+    };
+
+    // === PAYMENT HANDLERS ===
+    function handleZenoPayment(e) {
+        if (!config.isZenoPayActive) return;
+        
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        
+        const mobile = $('#zenopay-mobile-input').val();
+        if (!mobile || mobile.length < 5) {
+            ui.showStatus('Please enter a valid phone number', 'red');
+            return;
+        }
+        
+        ui.setButtonState(true);
+        ui.showStatus('Processing... Please wait.');
+        
+        paymentHandler.initiate(mobile)
+            .catch(() => ui.showStatus('Payment failed to start. Try again.', 'red'))
+            .finally(() => ui.setButtonState(false));
+    }
+
+    const paymentHandler = {
+        initiate: function(mobile) {
+            config.userMobile = mobile;
+            
+            return orderHandler.create()
+                .then(() => this.processPayment(mobile))
+                .then(data => {
+                    if (data.status) {
+                        config.ZenoPayOrderId = data.zenoOrderId;
+                        this.monitorPayment();
+                    } else {
+                        ui.showStatus('Payment failed. Please try again.', 'red');
                     }
                 });
-            }
-        }, 1000);
-    } 
-
-    // Fetch order status based on order ID
-    function fetchOrderStatus() {
-        const url = systemUrl;
-        const data = {
-            action: 'zeno_payment_status',
-            order_id: orderId,
-            zeno_id: ZenoPayOrderId
-        }; 
-        return new Promise((resolve, reject) => {
-            $.ajax({
-                url: url,
-                type: 'POST',
-                data: data,
-                success: function(response) {  
-                    resolve(response.data);
-                },
-                error: function() { 
-                    reject({});
-                }
+        },
+        
+        processPayment: function(mobile) {
+            return new Promise((resolve, reject) => {
+                $.ajax({
+                    url: config.systemUrl,
+                    type: 'POST',
+                    data: {
+                        action: 'zeno_initiate_payment',
+                        order_id: config.orderId,
+                        mobile: mobile
+                    },
+                    success: (response) => resolve(response.data),
+                    error: () => reject({ status: false, message: 'Network Error' })
+                });
             });
-        });
-    } 
+        },
+        
+        monitorPayment: function() {
+            ui.showStatus('Payment initiated. Waiting for confirmation...');
+            
+            let timer = config.waitingTime;
+            config.timerInterval = setInterval(async () => {
+                if (timer % 15 === 0) {
+                    const status = await orderHandler.checkStatus();
+                    if (status && status.status) {
+                        clearInterval(config.timerInterval);
+                        ui.showStatus(status.message, 'green');
+                        setTimeout(() => window.location = status.url, 3000);
+                    }
+                }
+                
+                if (timer-- < 0) {
+                    clearInterval(config.timerInterval);
+                    ui.showStatus('Payment timed out. You can try again.', 'orange');
+                }
+            }, 1000);
+        }
+    };
 
-    loadSweetAlert();
+    const orderHandler = {
+        create: function() {
+            return new Promise((resolve, reject) => {
+                $.ajax({
+                    url: config.systemUrl,
+                    type: 'POST',
+                    data: $('form.checkout').serialize() + '&action=zeno_create_order_from_cart',
+                    success: (response) => {
+                        if (response.success && response.data.order_id) {
+                            config.orderId = response.data.order_id;
+                            resolve();
+                        } else {
+                            ui.showStatus('Failed to create order.', 'red');
+                            reject();
+                        }
+                    },
+                    error: () => {
+                        ui.showStatus('Network error while creating order.', 'red');
+                        reject();
+                    }
+                });
+            });
+        },
+        
+        checkStatus: function() {
+            return new Promise((resolve) => {
+                $.ajax({
+                    url: config.systemUrl,
+                    type: 'POST',
+                    data: {
+                        action: 'zeno_payment_status',
+                        order_id: config.orderId,
+                        zeno_id: config.ZenoPayOrderId
+                    },
+                    success: (response) => resolve(response.data),
+                    error: () => resolve(null)
+                });
+            });
+        }
+    };
+
+    // === INITIALIZATION ===
+    $(function() {
+        // Wait for WooCommerce to initialize payment methods
+        const initInterval = setInterval(() => {
+            if ($('ul.wc_payment_methods').length > 0) {
+                clearInterval(initInterval);
+                ui.init();
+                
+                // Set up event handlers
+                $('form.checkout')
+                    .on('change', 'input[name="payment_method"]', ui.update)
+                    .on('submit', function(e) {
+                        if (config.isZenoPayActive) e.preventDefault();
+                    });
+                
+                $(document.body).on('updated_checkout', function() {
+                    // Re-inject UI if needed after checkout updates
+                    utils.injectPaymentPrompt();
+                    ui.update();
+                });
+                
+                // Initial UI update
+                ui.update();
+            }
+        }, 100);
+    });
 });
- 
