@@ -3,9 +3,8 @@
 class zenopayGateway extends WC_Payment_Gateway
 {
 
-    public $account_id;
     public $api_key;
-    public $secret_key;
+ 
 
     public function __construct()
     {
@@ -24,9 +23,9 @@ class zenopayGateway extends WC_Payment_Gateway
         $this->description = $this->get_option('description');
 
 
-        $this->account_id = $this->get_option('account_id');
+        
         $this->api_key = $this->get_option('api_key');
-        $this->secret_key = $this->get_option('secret_key');
+        
 
         // Add action hooks
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
@@ -56,13 +55,7 @@ class zenopayGateway extends WC_Payment_Gateway
                 'description' => __('This controls the description which the user sees during checkout.', 'zenopay'),
                 'default'     => __('Lipa kwa mitandao ya simu.', 'zenopay'),
             ),
-            'account_id' => array(
-                'title'       => __('Account ID', 'zenopay'),
-                'type'        => 'text',
-                'description' => __('Your zenopay Account ID.', 'zenopay'),
-                'default'     => '',
-                'desc_tip'    => true,
-            ),
+            
             'api_key' => array(
                 'title'       => __('API Key', 'zenopay'),
                 'type'        => 'text',
@@ -70,13 +63,7 @@ class zenopayGateway extends WC_Payment_Gateway
                 'default'     => '',
                 'desc_tip'    => true,
             ),
-            'secret_key' => array(
-                'title'       => __('Secret Key', 'zenopay'),
-                'type'        => 'password',
-                'description' => __('Your zenopay Secret Key.', 'zenopay'),
-                'default'     => '',
-                'desc_tip'    => true,
-            ),
+            
         );
     }
 
@@ -90,24 +77,30 @@ class zenopayGateway extends WC_Payment_Gateway
 
 
     private function send_curl_request($url, $data)
-    {
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_POST, 1);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 60); // Timeout in seconds
-        $response = curl_exec($ch);
+{
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_POST, 1);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data)); // Send JSON
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+        'Content-Type: application/json',
+        'x-api-key: ' . $this->api_key // Add API key in headers
+    ));
 
-        if (curl_errno($ch)) {
-            error_log('cURL error: ' . curl_error($ch));
-            curl_close($ch);
-            return null;
-        }
+    $response = curl_exec($ch);
 
+    if (curl_errno($ch)) {
+        error_log('cURL error: ' . curl_error($ch));
         curl_close($ch);
-        return json_decode($response, true);
+        return null;
     }
+
+    curl_close($ch);
+    return json_decode($response, true);
+}
+
 
     public function enqueue_scripts()
     {
@@ -138,19 +131,22 @@ class zenopayGateway extends WC_Payment_Gateway
 
             // Prepare the data for the cURL request
             $data = array(
-                'create_order' => 1,
+                'order_id'     => $order->get_id(), // or generate UUID if required
+
                 'buyer_email'  => $order->get_billing_email(),
                 'buyer_name'   => $order->get_billing_first_name() . ' ' . $order->get_billing_last_name(),
                 // 'buyer_phone'  => $order->get_billing_phone(),
                 'buyer_phone'  => '255'.$phoneNumber,
                 'amount'       => $order->get_total(),
-                'account_id'   => $this->get_option('account_id'),
+              
                 'api_key'      => $this->api_key,
-                'secret_key'   => $this->secret_key,
+                'webhook_url'  => site_url('/wp-json/zenopay/webhook') // Or your actual webhook
+
+                
             );
 
             // Send cURL request
-            $orderResponseData = $this->send_curl_request('https://api.zeno.africa', $data);
+            $orderResponseData = $this->send_curl_request('https://zenoapi.com/api/payments/mobile_money_tanzania', $data);
 
             if (strtolower($orderResponseData['status']) == 'success') {
                 $orderData = [
@@ -189,12 +185,12 @@ class zenopayGateway extends WC_Payment_Gateway
             'check_status' => 1,
             'order_id'     => $zeno_id,
             'api_key'      => $this->api_key,
-            'secret_key'   => $this->secret_key,
+          
         );
 
 
         // Send cURL request
-        $orderStatus = $this->send_curl_request('https://api.zeno.africa/status.php', $data);
+        $orderStatus = $this->send_curl_request('https://zenoapi.com/api/payments/order-status', $data);
 
         if (isset($orderStatus['status']) && $orderStatus['status'] == 'success') {
             if (isset($orderStatus['payment_status']) && strtolower($orderStatus['payment_status']) == 'completed') {
