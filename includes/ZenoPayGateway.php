@@ -111,6 +111,7 @@ class zenopayGateway extends WC_Payment_Gateway
         curl_close($ch);
         return json_decode($response, true);
     }
+    
 
     public function enqueue_scripts()
     {
@@ -124,6 +125,20 @@ class zenopayGateway extends WC_Payment_Gateway
         ));
     }
 
+    private function generate_zenopay_order_id($order_id) {
+    // Prefix with order number for reference
+    $prefix = 'ZP' . $order_id;
+
+    // Generate a random 12-character alphanumeric string
+    $random = substr(str_shuffle('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 0, 12);
+
+    // Combine and ensure max 20 characters
+    $zenoOrderId = substr($prefix . $random, 0, 20);
+
+    return $zenoOrderId;
+}
+
+
     public function zeno_initiate_payment($mobile, $order_id)
     {
         $phoneNumber = substr($mobile, -9); // 744963858
@@ -135,7 +150,7 @@ class zenopayGateway extends WC_Payment_Gateway
             $order = wc_get_order($order_id);
 
             $data = array(
-                'order_id'     => (string) $order->get_id(),
+                'order_id'     => $this->generate_zenopay_order_id($order->get_id()),
                 'buyer_email'  => $order->get_billing_email(),
                 'buyer_name'   => $order->get_billing_first_name() . ' ' . $order->get_billing_last_name(),
                 'buyer_phone'  => '0' . $phoneNumber, // e.g., 0744963858
@@ -166,6 +181,8 @@ class zenopayGateway extends WC_Payment_Gateway
             'message' => "Invalid Mobile Number"
         ];
     }
+
+    
 
     public function zeno_payment_status($zeno_id, $order_id)
     {
